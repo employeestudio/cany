@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,7 +58,7 @@
       return (
         <div className="w-full max-w-7xl mx-auto p-6 space-y-6">
           <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;600;700&display=swap');
+            svg { font-family: 'Work Sans', sans-serif; }
           `}</style>
           
           <div className="flex gap-4 mb-4 flex-wrap">
@@ -484,3 +483,426 @@
     ReactDOM.render(<MonitoringChart />, document.getElementById('root'));
   </script>
 </body>
+</html>
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              {showConfig ? 'Hide' : 'Show'} Configuration
+            </button>
+            <button
+              onClick={() => {
+                const svgElement = document.getElementById('chart-svg');
+                const svgData = new XMLSerializer().serializeToString(svgElement);
+                const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(svgBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `chart-${config.columns[config.highlightedIndex]?.facility || 'export'}-${Date.now()}.svg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Export SVG
+            </button>
+            <button
+              onClick={() => {
+                const svgElement = document.getElementById('chart-svg');
+                const svgData = new XMLSerializer().serializeToString(svgElement);
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                const scale = 2;
+                canvas.width = svgElement.width.baseVal.value * scale;
+                canvas.height = svgElement.height.baseVal.value * scale;
+                
+                img.onload = () => {
+                  ctx.fillStyle = 'white';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  ctx.scale(scale, scale);
+                  ctx.drawImage(img, 0, 0);
+                  canvas.toBlob((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `chart-${config.columns[config.highlightedIndex]?.facility || 'export'}-${Date.now()}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  });
+                };
+                
+                img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Export PNG
+            </button>
+            <button
+              onClick={() => {
+                const dataStr = JSON.stringify(config, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `chart-config-${config.columns[config.highlightedIndex]?.facility || 'export'}-${Date.now()}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+              }}
+              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+            >
+              Export JSON Config
+            </button>
+            <label className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 cursor-pointer">
+              Import JSON Config
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      try {
+                        const imported = JSON.parse(event.target.result);
+                        setConfig(imported);
+                      } catch (err) {
+                        alert('Invalid JSON file');
+                      }
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+              />
+            </label>
+            <label className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 cursor-pointer">
+              Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      try {
+                        const csv = event.target.result;
+                        const lines = csv.split('\n').filter(line => line.trim());
+                        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                        
+                        const columns = lines.slice(1).map(line => {
+                          const values = line.split(',').map(v => v.trim());
+                          const row = {};
+                          headers.forEach((header, idx) => {
+                            row[header] = values[idx];
+                          });
+                          
+                          return {
+                            facility: row.facility || row.name || '',
+                            date: row.date || '',
+                            percentage: parseInt(row.percentage || row.percent || '0'),
+                            n: parseInt(row.n || row.sample || '0'),
+                            N: parseInt(row.N || row.total || '0')
+                          };
+                        });
+                        
+                        setConfig({...config, columns});
+                      } catch (err) {
+                        alert('Invalid CSV file. Expected columns: facility, date, percentage, n, N');
+                      }
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+              />
+            </label>
+          </div>
+
+          {showConfig && (
+            <div className="bg-gray-50 p-6 rounded-lg border space-y-4">
+              <h3 className="font-semibold text-lg mb-4">Chart Configuration</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Header Date Range</label>
+                  <input
+                    type="text"
+                    value={config.headerDateRange}
+                    onChange={(e) => setConfig({...config, headerDateRange: e.target.value})}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Header Average (%)</label>
+                  <input
+                    type="text"
+                    value={config.headerAverage}
+                    onChange={(e) => setConfig({...config, headerAverage: e.target.value})}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Highlighted Column</label>
+                <select
+                  value={config.highlightedIndex}
+                  onChange={(e) => setConfig({...config, highlightedIndex: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border rounded"
+                >
+                  {config.columns.map((col, idx) => (
+                    <option key={idx} value={idx}>{col.facility}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Column Data (JSON)</label>
+                <textarea
+                  value={JSON.stringify(config.columns, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value);
+                      if (parsed.length === 0) {
+                        alert('You must have at least one column');
+                        return;
+                      }
+                      const newHighlightedIndex = config.highlightedIndex >= parsed.length 
+                        ? parsed.length - 1
+                        : config.highlightedIndex;
+                      setConfig({...config, columns: parsed, highlightedIndex: newHighlightedIndex});
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  onCopy={(e) => e.stopPropagation()}
+                  onPaste={(e) => e.stopPropagation()}
+                  onCut={(e) => e.stopPropagation()}
+                  className="w-full px-3 py-2 border rounded font-mono text-sm"
+                  rows={12}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white p-6 rounded-lg border">
+            <svg id="chart-svg" width={chartWidth} height={chartHeight} className="w-full" style={{ fontFamily: 'Work Sans, sans-serif' }}>
+              <rect
+                x={padding.left}
+                y={12}
+                width={innerWidth}
+                height={26}
+                fill="#F0EFEF"
+                stroke="#9BAFB3"
+                strokeWidth="0.5"
+                rx="2"
+              />
+              
+              <text x={padding.left + 8} y={30} fontSize="14" fill="#666">
+                <tspan fontWeight="normal" fill={AVERAGE_COLOR}>- - - -</tspan>
+                <tspan dx="10">Average across all monitoring visits conducted between {config.headerDateRange} ({config.headerAverage})</tspan>
+              </text>
+
+              {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((val) => (
+                <g key={val}>
+                  <line
+                    x1={padding.left + firstColumnOffset}
+                    y1={padding.top + innerHeight - (val / 100) * innerHeight}
+                    x2={padding.left + innerWidth}
+                    y2={padding.top + innerHeight - (val / 100) * innerHeight}
+                    stroke="#F5F7F7"
+                    strokeWidth="1"
+                    strokeDasharray="5,5"
+                  />
+                  <line
+                    x1={padding.left - 5}
+                    y1={padding.top + innerHeight - (val / 100) * innerHeight}
+                    x2={padding.left}
+                    y2={padding.top + innerHeight - (val / 100) * innerHeight}
+                    stroke="#999"
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={padding.left - 10}
+                    y={padding.top + innerHeight - (val / 100) * innerHeight + 5}
+                    textAnchor="end"
+                    fontSize="12"
+                    fill="#666"
+                  >
+                    {val}%
+                  </text>
+                </g>
+              ))}
+
+              <line
+                x1={padding.left + firstColumnOffset}
+                y1={padding.top + innerHeight - (avgPercentage / 100) * innerHeight}
+                x2={padding.left + innerWidth}
+                y2={padding.top + innerHeight - (avgPercentage / 100) * innerHeight}
+                stroke={AVERAGE_COLOR}
+                strokeWidth="1"
+                strokeDasharray="5,5"
+              />
+
+              <text
+                x={padding.left + innerWidth - 40}
+                y={padding.top + innerHeight - (avgPercentage / 100) * innerHeight - 50}
+                textAnchor="middle"
+                fontSize="11"
+                fill={AVERAGE_COLOR}
+                fontWeight="600"
+              >
+                Sample
+              </text>
+              <text
+                x={padding.left + innerWidth - 40}
+                y={padding.top + innerHeight - (avgPercentage / 100) * innerHeight - 35}
+                textAnchor="middle"
+                fontSize="11"
+                fill={AVERAGE_COLOR}
+                fontWeight="600"
+              >
+                Average
+              </text>
+              <text
+                x={padding.left + innerWidth - 40}
+                y={padding.top + innerHeight - (avgPercentage / 100) * innerHeight - 20}
+                textAnchor="middle"
+                fontSize="11"
+                fill={AVERAGE_COLOR}
+                fontWeight="600"
+              >
+                {config.headerAverage}
+              </text>
+              <text
+                x={padding.left + innerWidth - 40}
+                y={padding.top + innerHeight - (avgPercentage / 100) * innerHeight - 5}
+                textAnchor="middle"
+                fontSize="16"
+                fill={AVERAGE_COLOR}
+              >
+                ↓
+              </text>
+
+              {sortedColumns.map((col, idx) => {
+                const x = padding.left + firstColumnOffset + idx * columnWidth;
+                const barHeight = (col.percentage / 100) * innerHeight;
+                const y = padding.top + innerHeight - barHeight;
+                const highlightedFacility = config.columns[config.highlightedIndex]?.facility || '';
+                const isHighlighted = highlightedFacility === col.facility;
+
+                return (
+                  <g key={idx}>
+                    <rect
+                      x={x + columnWidth * 0.1}
+                      y={y}
+                      width={columnWidth * 0.8}
+                      height={barHeight}
+                      fill={isHighlighted ? "#0077B0" : "#C5D7DB"}
+                      stroke={isHighlighted ? "none" : "#46676F"}
+                      strokeWidth={isHighlighted ? "0" : "1"}
+                    />
+
+                    <rect
+                      x={x + columnWidth * 0.1}
+                      y={y - 40}
+                      width={columnWidth * 0.8}
+                      height={30}
+                      fill="#ffffff"
+                      fillOpacity="0.8"
+                      rx="3"
+                    />
+
+                    <text
+                      x={x + columnWidth / 2}
+                      y={y - 25}
+                      textAnchor="middle"
+                      fontSize="13"
+                      fontWeight={isHighlighted ? "bold" : "600"}
+                      fill={isHighlighted ? "#333" : "#4C5E61"}
+                    >
+                      {col.percentage}%
+                    </text>
+
+                    <text
+                      x={x + columnWidth / 2}
+                      y={y - 10}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill={isHighlighted ? "#333" : "#4C5E61"}
+                      fontWeight={isHighlighted ? "bold" : "600"}
+                    >
+                      (n={col.n})
+                    </text>
+
+                    <text
+                      x={x + columnWidth / 2}
+                      y={padding.top + innerHeight + 20}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight={isHighlighted ? "bold" : "600"}
+                      fill={isHighlighted ? "#333" : "#4C5E61"}
+                    >
+                      {col.facility}
+                    </text>
+                    <text
+                      x={x + columnWidth / 2}
+                      y={padding.top + innerHeight + 38}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill={isHighlighted ? "#333" : "#4C5E61"}
+                      fontWeight={isHighlighted ? "bold" : "600"}
+                    >
+                      {col.date}
+                    </text>
+                    <text
+                      x={x + columnWidth / 2}
+                      y={padding.top + innerHeight + 53}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fill={isHighlighted ? "#333" : "#4C5E61"}
+                      fontWeight={isHighlighted ? "bold" : "600"}
+                    >
+                      N={col.N}
+                    </text>
+                  </g>
+                );
+              })}
+
+              <line
+                x1={padding.left + firstColumnOffset}
+                y1={padding.top + innerHeight}
+                x2={padding.left + innerWidth}
+                y2={padding.top + innerHeight}
+                stroke="#999"
+                strokeWidth="1"
+              />
+
+              <line
+                x1={padding.left}
+                y1={padding.top}
+                x2={padding.left}
+                y2={padding.top + innerHeight}
+                stroke="#999"
+                strokeWidth="1"
+              />
+            </svg>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<MonitoringChart />, document.getElementById('root'));
+  </script>
+</body>
+</html>
